@@ -1,0 +1,55 @@
+Option Explicit
+
+' 1) Refresh aller Queries + 2) Export Tabelle aus "Ausgabe_Rohdaten" als neue Datei
+Public Sub RefreshAndExport_FinalRohdaten()
+    Dim ws As Worksheet
+    Dim lo As ListObject
+    Dim exportPath As String
+    Dim exportFile As String
+    Dim wbNew As Workbook
+    
+    ' Blattname anpassen
+    Set ws = ThisWorkbook.Worksheets("Ausgabe_Rohdaten")
+    
+    ' Tabelle auf dem Blatt: wenn du nur 1 Tabelle hast, passt lo(1).
+    ' Besser: Tabelle eindeutig benennen (Tabellentools -> Entwurf -> Tabellenname)
+    Set lo = ws.ListObjects(1)
+    
+    ' 1) Aktualisieren
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    
+    ThisWorkbook.RefreshAll
+    ' Warten bis Refresh fertig (wichtig bei Power Query)
+    Application.CalculateUntilAsyncQueriesDone
+    
+    ' 2) Exportpfad (hier: gleicher Ordner wie die Excel-Datei)
+    exportPath = ThisWorkbook.Path
+    If Len(exportPath) = 0 Then
+        MsgBox "Bitte die Arbeitsmappe zuerst speichern, damit ein Exportpfad existiert.", vbExclamation
+        GoTo Cleanup
+    End If
+    
+    exportFile = exportPath & "\Final_Rohdaten_" & Format(Now, "yyyy-mm-dd_HHMMSS") & ".xlsx"
+    
+    ' Neue Arbeitsmappe erstellen und Tabelle als Werte rein kopieren
+    Set wbNew = Workbooks.Add(xlWBATWorksheet)
+    With wbNew.Worksheets(1)
+        .Name = "Final_Rohdaten"
+        lo.Range.Copy
+        .Range("A1").PasteSpecial xlPasteValues
+        .Range("A1").PasteSpecial xlPasteFormats
+        Application.CutCopyMode = False
+        .Columns.AutoFit
+    End With
+    
+    ' Speichern und schließen
+    wbNew.SaveAs Filename:=exportFile, FileFormat:=xlOpenXMLWorkbook
+    wbNew.Close SaveChanges:=False
+    
+    MsgBox "Export erstellt: " & exportFile, vbInformation
+
+Cleanup:
+    Application.EnableEvents = True
+    Application.ScreenUpdating = True
+End Sub
