@@ -1,0 +1,57 @@
+let
+    Source = Rohdaten_All,
+
+    // 0) Keys hart als Text (verhindert Merge/Join-Probleme)
+    TypedKeys = Table.TransformColumnTypes(
+        Source,
+        {
+            {"Erlösvertragsnummer", type text},
+            {"Bezeichnung", type text},
+            {"Material", type text},
+            {"Materialbezeichnung", type text},
+            {"Ex./Int", type text}
+        }
+    ),
+
+    // 1) Mini-Tabelle: nur Key+Jahr, dann distinct
+    KeyYear = Table.Distinct(
+        Table.SelectColumns(
+            TypedKeys,
+            {"Jahr","Erlösvertragsnummer","Bezeichnung","Material","Materialbezeichnung","Ex./Int"},
+            MissingField.Error
+        )
+    ),
+
+    // 2) Anzahl Jahre pro Key (ohne Jahr gruppieren)
+    JahreProKombi = Table.Group(
+        KeyYear,
+        {"Erlösvertragsnummer","Bezeichnung","Material","Materialbezeichnung","Ex./Int"},
+        {{"AnzahlJahre", each Table.RowCount(_), Int64.Type}}
+    ),
+
+    // 3) Source schmal für Join: nur Source + Keys (alles andere bleibt, aber Join braucht Keys)
+    //    (Optional) Trim/Clean auf Textkeys gegen unsichtbare Leerzeichen
+    Cleaned = Table.TransformColumns(
+        TypedKeys,
+        {
+            {"Erlösvertragsnummer", each Text.Trim(Text.Clean(_)), type text},
+            {"Bezeichnung", each Text.Trim(Text.Clean(_)), type text},
+            {"Material", each Text.Trim(Text.Clean(_)), type text},
+            {"Materialbezeichnung", each Text.Trim(Text.Clean(_)), type text},
+            {"Ex./Int", each Text.Trim(Text.Clean(_)), type text}
+        }
+    ),
+
+    // 4) Join als NestedJoin (stabiler als UI-Merge), danach expandieren
+    Joined = Table.NestedJoin(
+        Cleaned,
+        {"Erlösvertragsnummer","Bezeichnung","Material","Materialbezeichnung","Ex./Int"},
+        JahreProKombi,
+        {"Erlösvertragsnummer","Bezeichnung","Material","Materialbezeichnung","Ex./Int"},
+        "JahreLookup",
+        JoinKind.LeftOuter
+    ),
+
+    Expanded = Table.ExpandTableColumn(Joined, "JahreLookup", {"AnzahlJahre"}, {"AnzahlJahre"})
+in
+    Expanded
