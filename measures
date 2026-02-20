@@ -1,10 +1,16 @@
 Umsatz (RD) Prev Visible (Sum over Years) :=
+VAR SelectedYears =
+    CALCULATETABLE(
+        VALUES(Calendar[Year]);
+        ALLSELECTED(Calendar[Year])
+    )
+RETURN
 SUMX(
     VALUES(Calendar[Year]);
     VAR CurrYear = MAX(Calendar[Year])
     VAR PY =
         MAXX(
-            FILTER(ALLSELECTED(Calendar[Year]); Calendar[Year] < CurrYear);
+            FILTER(SelectedYears; Calendar[Year] < CurrYear);
             Calendar[Year]
         )
     RETURN
@@ -13,10 +19,11 @@ SUMX(
             BLANK();
             CALCULATE(
                 [Umsatz (RD)];
-                FILTER(ALL(Calendar); Calendar[Year] = PY)
+                FILTER(ALLSELECTED(Calendar); Calendar[Year] = PY)
             )
         )
 )
+
 
 
 Umsatz (RD) Delta Prev Visible (Sum over Years) :=
