@@ -60,50 +60,36 @@ in
     Out
 
 
-let
-    // ... dein bisheriger Code bis inklusive DeltaMenge_Final / DeltaSumme_Final ...
+WithFinalDeltas = #"Hinzugefügte benutzerdefinierte Spalte3",   // <- DAS ist dein DeltaSumme_Final-Step
 
-    WithFinalDeltas = #"Hinzugefügte benutzerdefinierte Spalte3",  // <- bei dir der Step, der DeltaSumme_Final erzeugt
+AllCols = Table.ColumnNames(WithFinalDeltas),
+KeyCols = List.Difference(AllCols, {"Jahr","DeltaMenge_Final","DeltaSumme_Final","Jahresmenge","Jahressumme"}),
 
-    // Key-Spalten: alles außer Jahr und Rechenfelder
-    AllCols = Table.ColumnNames(WithFinalDeltas),
-    KeyCols = List.Difference(AllCols, {
-        "Jahr",
-        "DeltaMenge_%", "DeltaSumme_%",
-        "Override_DeltaMenge_%", "Override_DeltaSumme_%",      // falls bei dir so heißen
-        "PF_DeltaMenge_%", "PF_DeltaSumme_%",                  // falls bei dir so heißen
-        "DeltaMenge_Final", "DeltaSumme_Final",
-        "Jahresmenge", "Jahressumme"
-    }),
+Grouped = Table.Group(WithFinalDeltas, KeyCols, {
+    {"t", (t) =>
+        let
+            s = Table.Sort(t, {{"Jahr", Order.Ascending}}),
 
-    Grouped = Table.Group(WithFinalDeltas, KeyCols, {
-        {"t", (t) =>
-            let
-                s = Table.Sort(t, {{"Jahr", Order.Ascending}}),
+            baseM = s{0}[BaseMenge_2025],
+            baseS = s{0}[BaseSumme_2025],
 
-                baseM = s{0}[BaseMenge_2025],
-                baseS = s{0}[BaseSumme_2025],
+            dM = List.Transform(s[DeltaMenge_Final], each if _ = null then 0 else _),
+            dS = List.Transform(s[DeltaSumme_Final], each if _ = null then 0 else _),
 
-                dM = List.Transform(s[DeltaMenge_Final], each if _ = null then 0 else _),
-                dS = List.Transform(s[DeltaSumme_Final], each if _ = null then 0 else _),
+            mList = List.Skip(
+                List.Accumulate(dM, {baseM}, (state, cur) => state & { List.Last(state) * (1 + cur) })
+            , 1),
+            sList = List.Skip(
+                List.Accumulate(dS, {baseS}, (state, cur) => state & { List.Last(state) * (1 + cur) })
+            , 1),
 
-                mList = List.Skip(
-                    List.Accumulate(dM, {baseM}, (state, cur) => state & { List.Last(state) * (1 + cur) })
-                , 1),
-                sList = List.Skip(
-                    List.Accumulate(dS, {baseS}, (state, cur) => state & { List.Last(state) * (1 + cur) })
-                , 1),
+            withIdx = Table.AddIndexColumn(s, "__i", 0, 1, Int64.Type),
+            addM = Table.AddColumn(withIdx, "Jahresmenge", each mList{[__i]}, type number),
+            addS = Table.AddColumn(addM, "Jahressumme", each sList{[__i]}, type number),
+            out  = Table.RemoveColumns(addS, {"__i"})
+        in
+            out
+    , type table}
+}),
 
-                withIdx = Table.AddIndexColumn(s, "__i", 0, 1, Int64.Type),
-                addM = Table.AddColumn(withIdx, "Jahresmenge", each mList{[__i]}, type number),
-                addS = Table.AddColumn(addM, "Jahressumme", each sList{[__i]}, type number),
-                out  = Table.RemoveColumns(addS, {"__i"})
-            in
-                out
-        , type table}
-    }),
-
-    Rolled = Table.Combine(Grouped[t])
-
-in
-    Rolled
+Rolled = Table.Combine(Grouped[t]),
