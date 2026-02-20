@@ -1,0 +1,109 @@
+let
+    Source = Plan_PF_PQ,                 // hat bereits /100 gemacht
+    Years  = Plan_Jahre_26_30,           // Tabelle mit Spalte [Jahr] 2026..2030
+
+    Keys   = Table.Distinct(Table.SelectColumns(Source, {"Produktgruppe PdE"})),
+    Grid0  = Table.AddColumn(Keys, "Y", each Years),
+    Grid   = Table.ExpandTableColumn(Grid0, "Y", {"Jahr"}, {"Jahr"}),
+
+    Joined = Table.NestedJoin(
+        Grid, {"Produktgruppe PdE","Jahr"},
+        Source, {"Produktgruppe PdE","Jahr"},
+        "src", JoinKind.LeftOuter
+    ),
+    Expanded = Table.ExpandTableColumn(Joined, "src", {"DeltaMenge_%","DeltaSumme_%"}, {"DeltaMenge_%","DeltaSumme_%"}),
+
+    // Fill-Forward pro Produktgruppe
+    Grouped = Table.Group(Expanded, {"Produktgruppe PdE"}, {
+        {"t", (t) =>
+            let
+                s  = Table.Sort(t, {{"Jahr", Order.Ascending}}),
+                fd = Table.FillDown(s, {"DeltaMenge_%","DeltaSumme_%"}),
+                z  = Table.ReplaceValue(fd, null, 0, Replacer.ReplaceValue, {"DeltaMenge_%","DeltaSumme_%"})
+            in
+                z
+        , type table}
+    }),
+    Out = Table.Combine(Grouped[t])
+in
+    Out
+
+
+
+let
+    Source = Plan_Override_PQ,           // hat bereits /100 gemacht
+    Years  = Plan_Jahre_26_30,
+
+    Keys   = Table.Distinct(Table.SelectColumns(Source, {"Erlösvertragsnummer"})),
+    Grid0  = Table.AddColumn(Keys, "Y", each Years),
+    Grid   = Table.ExpandTableColumn(Grid0, "Y", {"Jahr"}, {"Jahr"}),
+
+    Joined = Table.NestedJoin(
+        Grid, {"Erlösvertragsnummer","Jahr"},
+        Source, {"Erlösvertragsnummer","Jahr"},
+        "src", JoinKind.LeftOuter
+    ),
+    Expanded = Table.ExpandTableColumn(Joined, "src", {"DeltaMenge_%","DeltaSumme_%"}, {"DeltaMenge_%","DeltaSumme_%"}),
+
+    Grouped = Table.Group(Expanded, {"Erlösvertragsnummer"}, {
+        {"t", (t) =>
+            let
+                s  = Table.Sort(t, {{"Jahr", Order.Ascending}}),
+                fd = Table.FillDown(s, {"DeltaMenge_%","DeltaSumme_%"}),
+                z  = Table.ReplaceValue(fd, null, 0, Replacer.ReplaceValue, {"DeltaMenge_%","DeltaSumme_%"})
+            in
+                z
+        , type table}
+    }),
+    Out = Table.Combine(Grouped[t])
+in
+    Out
+
+
+let
+    // ... dein bisheriger Code bis inklusive DeltaMenge_Final / DeltaSumme_Final ...
+
+    WithFinalDeltas = #"Hinzugefügte benutzerdefinierte Spalte3",  // <- bei dir der Step, der DeltaSumme_Final erzeugt
+
+    // Key-Spalten: alles außer Jahr und Rechenfelder
+    AllCols = Table.ColumnNames(WithFinalDeltas),
+    KeyCols = List.Difference(AllCols, {
+        "Jahr",
+        "DeltaMenge_%", "DeltaSumme_%",
+        "Override_DeltaMenge_%", "Override_DeltaSumme_%",      // falls bei dir so heißen
+        "PF_DeltaMenge_%", "PF_DeltaSumme_%",                  // falls bei dir so heißen
+        "DeltaMenge_Final", "DeltaSumme_Final",
+        "Jahresmenge", "Jahressumme"
+    }),
+
+    Grouped = Table.Group(WithFinalDeltas, KeyCols, {
+        {"t", (t) =>
+            let
+                s = Table.Sort(t, {{"Jahr", Order.Ascending}}),
+
+                baseM = s{0}[BaseMenge_2025],
+                baseS = s{0}[BaseSumme_2025],
+
+                dM = List.Transform(s[DeltaMenge_Final], each if _ = null then 0 else _),
+                dS = List.Transform(s[DeltaSumme_Final], each if _ = null then 0 else _),
+
+                mList = List.Skip(
+                    List.Accumulate(dM, {baseM}, (state, cur) => state & { List.Last(state) * (1 + cur) })
+                , 1),
+                sList = List.Skip(
+                    List.Accumulate(dS, {baseS}, (state, cur) => state & { List.Last(state) * (1 + cur) })
+                , 1),
+
+                withIdx = Table.AddIndexColumn(s, "__i", 0, 1, Int64.Type),
+                addM = Table.AddColumn(withIdx, "Jahresmenge", each mList{[__i]}, type number),
+                addS = Table.AddColumn(addM, "Jahressumme", each sList{[__i]}, type number),
+                out  = Table.RemoveColumns(addS, {"__i"})
+            in
+                out
+        , type table}
+    }),
+
+    Rolled = Table.Combine(Grouped[t])
+
+in
+    Rolled
