@@ -45,3 +45,44 @@ SUMX(
     RETURN
         IF(ISBLANK(PrevVal); BLANK(); CurrVal - PrevVal)
 )
+
+
+Umsatz (RD) Prev Visible (Sum over Years) :=
+VAR SelectedYears =
+    CALCULATETABLE(
+        VALUES(Calendar[Year]);
+        ALLSELECTED(Calendar[Year])
+    )
+RETURN
+SUMX(
+    VALUES(Calendar[Year]);
+    VAR CurrYear = MAX(Calendar[Year])
+    VAR PY =
+        MAXX(
+            FILTER(SelectedYears; Calendar[Year] < CurrYear);
+            Calendar[Year]
+        )
+    RETURN
+        IF(
+            ISBLANK(PY);
+            BLANK();
+            CALCULATE(
+                [Umsatz (RD)];
+                FILTER(ALL(Calendar[Year]); Calendar[Year] = PY)
+            )
+        )
+)
+
+
+Prev Visible Year (debug) :=
+VAR SelectedYears =
+    CALCULATETABLE(
+        VALUES(Calendar[Year]);
+        ALLSELECTED(Calendar[Year])
+    )
+VAR CurrYear = MAX(Calendar[Year])
+RETURN
+MAXX(
+    FILTER(SelectedYears; Calendar[Year] < CurrYear);
+    Calendar[Year]
+)
