@@ -1,0 +1,40 @@
+Umsatz (RD) Prev Visible (Sum over Years) :=
+SUMX(
+    VALUES(Calendar[Year]);
+    VAR CurrYear = MAX(Calendar[Year])
+    VAR PY =
+        MAXX(
+            FILTER(ALLSELECTED(Calendar[Year]); Calendar[Year] < CurrYear);
+            Calendar[Year]
+        )
+    RETURN
+        IF(
+            ISBLANK(PY);
+            BLANK();
+            CALCULATE(
+                [Umsatz (RD)];
+                FILTER(ALL(Calendar); Calendar[Year] = PY)
+            )
+        )
+)
+
+
+Umsatz (RD) Delta Prev Visible (Sum over Years) :=
+SUMX(
+    VALUES(Calendar[Year]);
+    VAR CurrYear = MAX(Calendar[Year])
+    VAR PY =
+        MAXX(
+            FILTER(ALLSELECTED(Calendar[Year]); Calendar[Year] < CurrYear);
+            Calendar[Year]
+        )
+    VAR CurrVal = CALCULATE([Umsatz (RD)])
+    VAR PrevVal =
+        IF(
+            ISBLANK(PY);
+            BLANK();
+            CALCULATE([Umsatz (RD)]; FILTER(ALL(Calendar); Calendar[Year] = PY))
+        )
+    RETURN
+        IF(ISBLANK(PrevVal); BLANK(); CurrVal - PrevVal)
+)
